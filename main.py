@@ -1,17 +1,17 @@
 import torch
-import matplotlib.pyplot as plt
 import json
+import matplotlib.pyplot as plt
 from os.path import exists
 
 plt.interactive(True)
 
 letters = '.abcdefghijklmnopqrstuvwxyz'
-letter_to_arr_index = {letter: index for index, letter in enumerate(letters)}
-arr_index_to_letter = {index: letter for index, letter in enumerate(letters)}
+L_TO_IDX = {letter: index for index, letter in enumerate(letters)}
+IDX_TO_L = {index: letter for index, letter in enumerate(letters)}
 
 
 def generate_data():
-    if exists('bigram_arr.pt') and exists('words.txt'):
+    if exists('bigram_arr.pt') and exists('words.txt') and exists('bigram_graph.png'):
         with open("words.txt", "r") as f:
             words = json.load(f)
         return torch.load('bigram_arr.pt'), words
@@ -21,9 +21,10 @@ def generate_data():
     for word in words:
         chars = ["."] + list(word) + ["."]
         for char1, char2 in zip(chars, chars[1:]):
-            index1 = letter_to_arr_index[char1]
-            index2 = letter_to_arr_index[char2]
+            index1 = L_TO_IDX[char1]
+            index2 = L_TO_IDX[char2]
             bigram_arr[index1, index2] += 1
+    generate_graph(bigram_arr)
     # Save to file and return
     torch.save(bigram_arr, 'bigram_arr.pt')
     with open("words.txt", "w") as f:
@@ -37,15 +38,15 @@ def generate_graph(bigram_arr):
     for i in range(27):
         for j in range(27):
             # Label
-            label = arr_index_to_letter[i] + arr_index_to_letter[j]
+            label = IDX_TO_L[i] + IDX_TO_L[j]
             plt.text(j, i, label, ha="center", va="bottom", color='gray')
             # Number
             plt.text(j, i, bigram_arr[i, j].item(), ha="center", va="top", color='gray')
     plt.axis('off')
-    plt.savefig('myfig.png')
+    plt.savefig('bigram_graph.png')
 
 
-def generate_predicitions(num_predictions, seed=2147483647):
+def generate_predictions(num_predictions, seed=2147483647):
     gen = torch.Generator().manual_seed(seed)
     predictions = []
     for i in range(num_predictions):
@@ -54,7 +55,7 @@ def generate_predicitions(num_predictions, seed=2147483647):
         while True:
             probability = probabilities[index]
             index = torch.multinomial(probability, num_samples=1, replacement=True, generator=gen).item()
-            output.append(arr_index_to_letter[index])
+            output.append(IDX_TO_L[index])
             if index == 0:
                 break
         predictions.append(''.join(output))
@@ -75,8 +76,8 @@ def calc_likelihood_score():
     for word in words:
         chars = ["."] + list(word) + ["."]
         for char1, char2 in zip(chars, chars[1:]):
-            index1 = letter_to_arr_index[char1]
-            index2 = letter_to_arr_index[char2]
+            index1 = L_TO_IDX[char1]
+            index2 = L_TO_IDX[char2]
             prob = probabilities[index1, index2]
             log_prob = torch.log(prob)
             log_likelihood += log_prob
@@ -88,8 +89,6 @@ def calc_likelihood_score():
 
 
 bigrams, words = generate_data()
-# generate_graph(bigrams)
-
 
 # (bigrams+1) adds one to the count of each bigram
 # it is there to smooth the model, so there is always more than a 0% chance of a bigram existing
@@ -99,7 +98,7 @@ bigrams, words = generate_data()
 # If keepdim was false, the vector would get morphed into a row vector (1 by 27 array) when broadcasting division operation
 probabilities = (bigrams+1).float()
 probabilities /= probabilities.sum(1, keepdim=True)
-for prediction in generate_predicitions(10):
+for prediction in generate_predictions(10):
     print(prediction)
 
 print(calc_likelihood_score())
